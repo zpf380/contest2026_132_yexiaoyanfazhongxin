@@ -1,6 +1,6 @@
 {
-  "package": "com.application.watch.demo",
-  "name": "vela",
+  "package": "com.posture.guard",
+  "name": "姿态守护",
   "versionName": "1.0.0",
   "versionCode": 1,
   "minPlatformVersion": 1000,
@@ -9,9 +9,11 @@
     "watch"
   ],
   "features": [
-    {
-      "name": "system.router"
-    }
+    { "name": "system.router" },
+    { "name": "system.sensor" },
+    { "name": "system.vibrator" },
+    { "name": "system.storage" },
+    { "name": "system.battery" }
   ],
   "config": {
     "logLevel": "log",
@@ -23,9 +25,16 @@
       "pages/index": {
         "component": "index"
       },
-      "pages/detail": {
-        "component": "detail"
+      "pages/history": {
+        "component": "index"
+      },
+      "pages/settings": {
+        "component": "index"
       }
     }
+  },
+  "display": {
+    "backgroundColor": "#000000",
+    "textColor": "#ffffff"
   }
 }
