@@ -1,0 +1,201 @@
+<!--
+  posture-result.ux - 姿态识别结果显示组件
+  展示当前识别出的姿态、置信度、概率分布
+-->
+<template>
+  <div class="posture-card">
+    <div class="posture-header">
+      <div class="posture-icon" style="background-color: {{postureColor}}">
+        <text class="icon-text">{{postureEmoji}}</text>
+      </div>
+      <div class="posture-info">
+        <text class="posture-label" style="color: {{postureColor}}">{{postureLabel}}</text>
+        <text class="confidence-text">置信度 {{confidenceText}}</text>
+      </div>
+    </div>
+
+    <!-- 置信度条 -->
+    <div class="confidence-bar-bg">
+      <div class="confidence-bar-fill" style="width: {{confidencePercent}}px; background-color: {{postureColor}}"></div>
+    </div>
+
+    <!-- 概率分布 -->
+    <div class="prob-list">
+      <div class="prob-row" for="{{probItems}}">
+        <text class="prob-label">{{$item.label}}</text>
+        <div class="prob-bar-bg">
+          <div class="prob-bar-fill" style="width: {{$item.width}}px; background-color: {{$item.color}}"></div>
+        </div>
+        <text class="prob-value">{{$item.value}}</text>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { POSTURE_LABEL, POSTURE_COLOR } from '../common/constants'
+
+export default {
+  props: {
+    /** 当前姿态标签 */
+    posture: { type: String, default: 'unknown' },
+    /** 置信度 (0~1) */
+    confidence: { type: Number, default: 0 },
+    /** 各类概率 { standing, sitting, walking, hand_raise, fall } */
+    probabilities: { type: Object, default: () => ({}) }
+  },
+
+  computed: {
+    /** 姿态中文名 */
+    postureLabel() {
+      return POSTURE_LABEL[this.posture] || '未知'
+    },
+    /** 姿态颜色 */
+    postureColor() {
+      return POSTURE_COLOR[this.posture] || '#757575'
+    },
+    /** 姿态表情符号 */
+    postureEmoji() {
+      const emojis = {
+        standing: '🧍',
+        sitting: '🪑',
+        walking: '🚶',
+        hand_raise: '✋',
+        fall: '⚠️',
+        unknown: '❓'
+      }
+      return emojis[this.posture] || '❓'
+    },
+    /** 置信度百分比文本 */
+    confidenceText() {
+      return (this.confidence * 100).toFixed(0) + '%'
+    },
+    /** 置信度条宽度(最大150px) */
+    confidencePercent() {
+      return Math.floor(this.confidence * 150)
+    },
+    /** 概率分布列表 */
+    probItems() {
+      const items = []
+      const labels = {
+        standing: '站立',
+        sitting: '坐下',
+        walking: '行走',
+        hand_raise: '抬手',
+        fall: '摔倒'
+      }
+      const colors = POSTURE_COLOR
+
+      const keys = Object.keys(labels)
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i]
+        const prob = this.probabilities[key] || 0
+        items.push({
+          label: labels[key],
+          value: (prob * 100).toFixed(0) + '%',
+          width: Math.floor(prob * 100),
+          color: colors[key]
+        })
+      }
+      return items
+    }
+  }
+}
+</script>
+
+<style>
+.posture-card {
+  flex-direction: column;
+  background-color: #1a1a2e;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.posture-header {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.posture-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  justify-content: center;
+  align-items: center;
+  margin-right: 10px;
+}
+
+.icon-text {
+  font-size: 20px;
+}
+
+.posture-info {
+  flex-direction: column;
+}
+
+.posture-label {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.confidence-text {
+  font-size: 12px;
+  color: #aaaaaa;
+  margin-top: 2px;
+}
+
+/* 置信度条 */
+.confidence-bar-bg {
+  height: 6px;
+  background-color: #333333;
+  border-radius: 3px;
+  margin-bottom: 10px;
+}
+
+.confidence-bar-fill {
+  height: 6px;
+  border-radius: 3px;
+}
+
+/* 概率分布 */
+.prob-list {
+  flex-direction: column;
+}
+
+.prob-row {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 3px;
+}
+
+.prob-label {
+  width: 40px;
+  font-size: 11px;
+  color: #aaaaaa;
+}
+
+.prob-bar-bg {
+  flex: 1;
+  height: 4px;
+  background-color: #333333;
+  border-radius: 2px;
+  margin-left: 6px;
+  margin-right: 6px;
+}
+
+.prob-bar-fill {
+  height: 4px;
+  border-radius: 2px;
+}
+
+.prob-value {
+  width: 35px;
+  font-size: 11px;
+  color: #aaaaaa;
+  text-align: right;
+}
+</style>

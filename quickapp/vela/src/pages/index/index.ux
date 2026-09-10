@@ -1,48 +1,393 @@
+<!--
+  index.ux - 主监控面板
+  实时展示传感器数据、姿态识别结果、置信度
+  支持开始/暂停、历史记录、设置导航
+-->
+<import name="sensor-display" src="../../components/sensor-display.ux"></import>
+<import name="posture-result" src="../../components/posture-result.ux"></import>
+
 <template>
-  <div class="demo-page">
-    <text class="title">{{ $t("a.b") }},欢迎打开{{ title }}</text>
-    <!-- 点击跳转详情页 -->
-    <input class="btn" type="button" value="跳转到详情页" onclick="routeDetail" />
+  <div class="page">
+    <!-- 顶部状态栏 -->
+    <div class="top-bar">
+      <text class="app-title">姿态守护</text>
+      <text class="battery-text" onclick="refreshBattery">{{batteryLevel}}%</text>
+    </div>
+
+    <!-- 传感器数据卡片 -->
+    <sensor-display
+      ax="{{sensorAx}}"
+      ay="{{sensorAy}}"
+      az="{{sensorAz}}"
+      magnitude="{{sensorMag}}"
+      sensorStatus="{{sensorStatus}}"
+    ></sensor-display>
+
+    <!-- 姿态识别结果卡片 -->
+    <posture-result
+      posture="{{currentPosture}}"
+      confidence="{{confidence}}"
+      probabilities="{{probabilities}}"
+    ></posture-result>
+
+    <!-- 摔倒警告 -->
+    <div class="fall-alert" if="{{showFallAlert}}">
+      <text class="fall-alert-text">⚠️ 检测到摔倒!</text>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="btn-row">
+      <div class="btn btn-start" onclick="toggleSensor">
+        <text class="btn-text">{{isRunning ? '暂停' : '开始'}}</text>
+      </div>
+      <div class="btn btn-history" onclick="goHistory">
+        <text class="btn-text">记录</text>
+      </div>
+      <div class="btn btn-settings" onclick="goSettings">
+        <text class="btn-text">设置</text>
+      </div>
+    </div>
+
+    <!-- 底部信息 -->
+    <div class="footer">
+      <text class="footer-text">推理 {{inferCount}}次 | 延迟 {{avgLatency}}ms</text>
+    </div>
   </div>
 </template>
 
 <script>
-import router from "@system.router"
+import sensorManager from '../../common/sensor-manager'
+import preprocessor from '../../common/preprocessor'
+import postureModel from '../../common/posture-model'
+import { POSTURE, SAMPLING } from '../../common/constants'
+import router from '@system.router'
+import battery from '@system.battery'
+import vibrator from '@system.vibrator'
+import storage from '@system.storage'
 
 export default {
-  // 页面级组件的数据模型，影响传入数据的覆盖机制：private内定义的属性不允许被覆盖
   private: {
-    title: "示例页面"
+    // 传感器数据
+    sensorAx: '0.00',
+    sensorAy: '0.00',
+    sensorAz: '0.00',
+    sensorMag: '0.00',
+    sensorStatus: 'idle',
+
+    // 姿态结果
+    currentPosture: 'unknown',
+    confidence: 0,
+    probabilities: {},
+
+    // 摔倒警告
+    showFallAlert: false,
+    fallAlertTimer: null,
+
+    // 统计
+    inferCount: 0,
+    avgLatency: '0',
+
+    // 电池
+    batteryLevel: '--',
+
+    // 运行状态
+    isRunning: false,
+
+    // 推理定时器
+    inferTimer: null,
+
+    // 解除监听器函数
+    _unsubData: null,
+
+    // 历史记录缓存
+    _historyBuffer: []
   },
 
-  routeDetail() {
-    // 跳转到应用内的某个页面，router用法详见：文档->接口->页面路由
-    router.push({
-      uri: "/pages/detail"
+  onInit() {
+    console.log('[Index] 页面初始化')
+    // 初始化概率
+    this.probabilities = {
+      standing: 0, sitting: 0, walking: 0, hand_raise: 0, fall: 0
+    }
+  },
+
+  onShow() {
+    console.log('[Index] 页面显示')
+    // 注册传感器数据回调
+    this._unsubData = sensorManager.onData((data) => {
+      this._onSensorData(data)
     })
+
+    // 应用前台 → 恢复传感器
+    sensorManager.onForeground()
+    this._updateStatus()
+    this.refreshBattery()
+  },
+
+  onHide() {
+    console.log('[Index] 页面隐藏')
+    // 注销数据回调
+    if (this._unsubData) {
+      this._unsubData()
+      this._unsubData = null
+    }
+    // 应用后台 → 延迟暂停传感器
+    sensorManager.onBackground()
+  },
+
+  onDestroy() {
+    console.log('[Index] 页面销毁')
+    this._cleanup()
+  },
+
+  // ========== 业务方法 ==========
+
+  /** 切换传感器启停 */
+  toggleSensor() {
+    if (this.isRunning) {
+      sensorManager.stop()
+      this._stopInferTimer()
+      this.isRunning = false
+    } else {
+      sensorManager.start(SAMPLING.DEFAULT_INTERVAL)
+      this._startInferTimer()
+      this.isRunning = true
+    }
+    this._updateStatus()
+  },
+
+  /** 启动推理定时器(每500ms推理一次) */
+  _startInferTimer() {
+    this._stopInferTimer()
+    this.inferTimer = setInterval(() => {
+      this._runInference()
+    }, 500)
+  },
+
+  /** 停止推理定时器 */
+  _stopInferTimer() {
+    if (this.inferTimer) {
+      clearInterval(this.inferTimer)
+      this.inferTimer = null
+    }
+  },
+
+  /** 处理传感器数据(更新UI显示) */
+  _onSensorData(data) {
+    this.sensorAx = data.x.toFixed(2)
+    this.sensorAy = data.y.toFixed(2)
+    this.sensorAz = data.z.toFixed(2)
+    const mag = Math.sqrt(data.x * data.x + data.y * data.y + data.z * data.z)
+    this.sensorMag = mag.toFixed(2)
+  },
+
+  /** 执行一次推理 */
+  _runInference() {
+    // 1. 获取传感器原始数据窗口
+    const window = sensorManager.getData(SAMPLING.WINDOW_SIZE)
+    if (window.length < SAMPLING.WINDOW_SIZE) return // 数据不足
+
+    // 2. 预处理: 提取特征
+    const features = preprocessor.extractFeatures(window)
+
+    // 3. 推理
+    const result = postureModel.predict(features)
+
+    // 4. 更新UI
+    this.currentPosture = result.posture
+    this.confidence = result.confidence
+    this.probabilities = result.probabilities || {}
+    this.inferCount = postureModel.getInferCount()
+    this.avgLatency = postureModel.getAvgLatency().toFixed(1)
+
+    // 5. 摔倒检测 → 振动报警
+    if (result.posture === POSTURE.FALL && result.confidence > 0.6) {
+      this._triggerFallAlert()
+    }
+
+    // 6. 记录历史
+    this._recordHistory(result)
+  },
+
+  /** 摔倒报警 */
+  _triggerFallAlert() {
+    if (this.showFallAlert) return // 防止重复触发
+    this.showFallAlert = true
+
+    // 振动报警
+    try {
+      vibrator.vibrate({ mode: 'long' })
+    } catch (e) {
+      console.error('[Index] 振动失败: ' + e)
+    }
+
+    // 3秒后自动消失
+    if (this.fallAlertTimer) clearTimeout(this.fallAlertTimer)
+    this.fallAlertTimer = setTimeout(() => {
+      this.showFallAlert = false
+    }, 3000)
+  },
+
+  /** 记录历史(内存缓冲, 定期写入存储) */
+  _recordHistory(result) {
+    this._historyBuffer.push({
+      time: Date.now(),
+      posture: result.posture,
+      confidence: result.confidence
+    })
+    // 每10条写入一次存储
+    if (this._historyBuffer.length >= 10) {
+      this._flushHistory()
+    }
+  },
+
+  /** 写入历史到存储 */
+  _flushHistory() {
+    if (this._historyBuffer.length === 0) return
+    try {
+      const data = JSON.stringify(this._historyBuffer)
+      storage.set({
+        key: 'posture_history',
+        value: data,
+        success: () => { this._historyBuffer = [] },
+        fail: (d, c) => { console.error('[Index] 历史存储失败: ' + c) }
+      })
+    } catch (e) {
+      console.error('[Index] 历史写入异常: ' + e)
+    }
+  },
+
+  /** 更新传感器状态显示 */
+  _updateStatus() {
+    this.sensorStatus = sensorManager.state
+    this.isRunning = sensorManager.isRunning
+  },
+
+  /** 刷新电池信息 */
+  refreshBattery() {
+    try {
+      battery.getStatus({
+        success: (data) => {
+          this.batteryLevel = data.level
+          sensorManager.onLowBattery(data.level)
+        },
+        fail: (d, c) => {
+          this.batteryLevel = '--'
+        }
+      })
+    } catch (e) {
+      this.batteryLevel = '--'
+    }
+  },
+
+  /** 跳转到历史记录页 */
+  goHistory() {
+    router.push({ uri: '/pages/history/index' })
+  },
+
+  /** 跳转到设置页 */
+  goSettings() {
+    router.push({ uri: '/pages/settings/index' })
+  },
+
+  /** 清理资源 */
+  _cleanup() {
+    this._stopInferTimer()
+    if (this.fallAlertTimer) clearTimeout(this.fallAlertTimer)
+    this._flushHistory()
   }
 }
 </script>
 
 <style>
-.demo-page {
+.page {
   flex-direction: column;
+  padding: 8px 10px;
+  background-color: #0a0a1a;
+  height: 100%;
+}
+
+/* 顶部状态栏 */
+.top-bar {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.app-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.battery-text {
+  font-size: 12px;
+  color: #aaaaaa;
+  padding: 4px 8px;
+  background-color: #1a1a2e;
+  border-radius: 8px;
+}
+
+/* 摔倒警告 */
+.fall-alert {
+  background-color: #F44336;
+  border-radius: 8px;
+  padding: 8px;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.fall-alert-text {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+/* 操作按钮 */
+.btn-row {
+  flex-direction: row;
+  justify-content: space-around;
+  margin-top: 8px;
+}
+
+.btn {
+  flex: 1;
+  height: 36px;
+  border-radius: 18px;
+  justify-content: center;
+  align-items: center;
+  margin: 0 4px;
+}
+
+.btn-start {
+  background-color: #4CAF50;
+}
+
+.btn-history {
+  background-color: #2196F3;
+}
+
+.btn-settings {
+  background-color: #607D8B;
+}
+
+.btn-text {
+  font-size: 14px;
+  color: #ffffff;
+  font-weight: bold;
+}
+
+/* 底部信息 */
+.footer {
+  margin-top: 8px;
   justify-content: center;
   align-items: center;
 }
 
-.title {
-  font-size: 20px;
-  text-align: center;
-}
-
-.btn {
-  width: 200px;
-  height: 40px;
-  margin-top: 20px;
-  border-radius: 5px;
-  background-color: #09ba07;
-  font-size: 20px;
-  color: #ffffff;
+.footer-text {
+  font-size: 10px;
+  color: #555555;
 }
 </style>

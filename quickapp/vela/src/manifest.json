@@ -25,10 +25,10 @@
       "pages/index": {
         "component": "index"
       },
-      "pages/history": {
+      "pages/history/index": {
         "component": "index"
       },
-      "pages/settings": {
+      "pages/settings/index": {
         "component": "index"
       }
     }

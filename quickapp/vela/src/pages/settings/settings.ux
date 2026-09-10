@@ -1,0 +1,312 @@
+<!--
+  settings.ux - 设置页
+  采样频率、灵敏度、功耗管理、重置校准等配置
+-->
+<template>
+  <div class="page">
+    <div class="top-bar">
+      <div class="back-btn" onclick="goBack">
+        <text class="back-text">← 返回</text>
+      </div>
+      <text class="page-title">设置</text>
+    </div>
+
+    <!-- 采样频率 -->
+    <div class="setting-group">
+      <text class="group-title">采样频率</text>
+      <div class="setting-item" onclick="setSampleRate('fast')">
+        <text class="item-label">高精度 (20ms)</text>
+        <text class="item-check" if="{{sampleRate === 'fast'}}">✓</text>
+      </div>
+      <div class="setting-item" onclick="setSampleRate('normal')">
+        <text class="item-label">标准 (40ms)</text>
+        <text class="item-check" if="{{sampleRate === 'normal'}}">✓</text>
+      </div>
+      <div class="setting-item" onclick="setSampleRate('power-save')">
+        <text class="item-label">省电 (100ms)</text>
+        <text class="item-check" if="{{sampleRate === 'power-save'}}">✓</text>
+      </div>
+    </div>
+
+    <!-- 推理模式 -->
+    <div class="setting-group">
+      <text class="group-title">识别模式</text>
+      <div class="setting-item" onclick="setModelMode('rule')">
+        <text class="item-label">规则引擎 (省电)</text>
+        <text class="item-check" if="{{modelMode === 'rule'}}">✓</text>
+      </div>
+      <div class="setting-item" onclick="setModelMode('cnn')">
+        <text class="item-label">CNN推理 (精准)</text>
+        <text class="item-check" if="{{modelMode === 'cnn'}}">✓</text>
+      </div>
+    </div>
+
+    <!-- 功耗管理 -->
+    <div class="setting-group">
+      <text class="group-title">功耗管理</text>
+      <div class="setting-item">
+        <text class="item-label">低电量自动降频</text>
+        <div class="switch {{lowBatterySave ? 'switch-on' : 'switch-off'}}" onclick="toggleLowBattery">
+          <div class="switch-thumb"></div>
+        </div>
+      </div>
+      <div class="setting-item">
+        <text class="item-label">后台自动暂停</text>
+        <div class="switch {{bgPause ? 'switch-on' : 'switch-off'}}" onclick="toggleBgPause">
+          <div class="switch-thumb"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 系统信息 -->
+    <div class="setting-group">
+      <text class="group-title">系统信息</text>
+      <div class="setting-item">
+        <text class="item-label">应用版本</text>
+        <text class="item-value">1.0.0</text>
+      </div>
+      <div class="setting-item">
+        <text class="item-label">模型类型</text>
+        <text class="item-value">1D-CNN (5类)</text>
+      </div>
+      <div class="setting-item">
+        <text class="item-label">推理延迟</text>
+        <text class="item-value">{{avgLatency}}ms</text>
+      </div>
+    </div>
+
+    <!-- 重置按钮 -->
+    <div class="reset-btn" onclick="resetCalibration">
+      <text class="reset-text">重置传感器校准</text>
+    </div>
+  </div>
+</template>
+
+<script>
+import storage from '@system.storage'
+import router from '@system.router'
+import preprocessor from '../../common/preprocessor'
+import postureModel from '../../common/posture-model'
+import sensorManager from '../../common/sensor-manager'
+import { SAMPLING } from '../../common/constants'
+
+export default {
+  private: {
+    sampleRate: 'normal',
+    modelMode: 'rule',
+    lowBatterySave: true,
+    bgPause: true,
+    avgLatency: '0'
+  },
+
+  onInit() {
+    this._loadSettings()
+    this.avgLatency = postureModel.getAvgLatency().toFixed(1)
+  },
+
+  /** 加载设置 */
+  _loadSettings() {
+    storage.get({
+      key: 'posture_settings',
+      success: (data) => {
+        if (data) {
+          try {
+            const s = JSON.parse(data)
+            this.sampleRate = s.sampleRate || 'normal'
+            this.modelMode = s.modelMode || 'rule'
+            this.lowBatterySave = s.lowBatterySave !== false
+            this.bgPause = s.bgPause !== false
+            this._applySettings()
+          } catch (e) {
+            console.error('[Settings] 解析失败: ' + e)
+          }
+        }
+      },
+      fail: (d, c) => {
+        console.log('[Settings] 无保存设置, 使用默认')
+      }
+    })
+  },
+
+  /** 保存设置 */
+  _saveSettings() {
+    const s = {
+      sampleRate: this.sampleRate,
+      modelMode: this.modelMode,
+      lowBatterySave: this.lowBatterySave,
+      bgPause: this.bgPause
+    }
+    storage.set({
+      key: 'posture_settings',
+      value: JSON.stringify(s),
+      fail: (d, c) => { console.error('[Settings] 保存失败: ' + c) }
+    })
+  },
+
+  /** 应用设置到运行时 */
+  _applySettings() {
+    // 采样频率
+    const rates = {
+      'fast': SAMPLING.FAST_INTERVAL,
+      'normal': SAMPLING.DEFAULT_INTERVAL,
+      'power-save': SAMPLING.SLOW_INTERVAL
+    }
+    sensorManager.setInterval(rates[this.sampleRate] || SAMPLING.DEFAULT_INTERVAL)
+
+    // 模型模式
+    if (this.modelMode === 'cnn') {
+      postureModel.enableCNN()
+    } else {
+      postureModel.enableRuleEngine()
+    }
+  },
+
+  /** 设置采样频率 */
+  setSampleRate(rate) {
+    this.sampleRate = rate
+    this._applySettings()
+    this._saveSettings()
+  },
+
+  /** 设置推理模式 */
+  setModelMode(mode) {
+    this.modelMode = mode
+    this._applySettings()
+    this._saveSettings()
+  },
+
+  /** 切换低电量降频 */
+  toggleLowBattery() {
+    this.lowBatterySave = !this.lowBatterySave
+    this._saveSettings()
+  },
+
+  /** 切换后台暂停 */
+  toggleBgPause() {
+    this.bgPause = !this.bgPause
+    this._saveSettings()
+  },
+
+  /** 重置传感器校准 */
+  resetCalibration() {
+    preprocessor.reset()
+    postureModel.reset()
+    this.avgLatency = '0'
+  },
+
+  /** 返回首页 */
+  goBack() {
+    router.back()
+  }
+}
+</script>
+
+<style>
+.page {
+  flex-direction: column;
+  padding: 8px 10px;
+  background-color: #0a0a1a;
+  height: 100%;
+}
+
+.top-bar {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.back-btn {
+  padding: 4px 8px;
+  margin-right: 8px;
+}
+
+.back-text {
+  font-size: 14px;
+  color: #4CAF50;
+}
+
+.page-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+/* 设置分组 */
+.setting-group {
+  background-color: #1a1a2e;
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.group-title {
+  font-size: 13px;
+  color: #888888;
+  margin-bottom: 8px;
+}
+
+.setting-item {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom-width: 1px;
+  border-bottom-color: #222222;
+}
+
+.item-label {
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.item-value {
+  font-size: 13px;
+  color: #aaaaaa;
+}
+
+.item-check {
+  font-size: 16px;
+  color: #4CAF50;
+}
+
+/* 开关 */
+.switch {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  justify-content: center;
+  padding: 2px;
+}
+
+.switch-on {
+  background-color: #4CAF50;
+  align-items: flex-end;
+}
+
+.switch-off {
+  background-color: #555555;
+  align-items: flex-start;
+}
+
+.switch-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background-color: #ffffff;
+}
+
+/* 重置按钮 */
+.reset-btn {
+  margin-top: 8px;
+  height: 36px;
+  border-radius: 18px;
+  background-color: #333333;
+  justify-content: center;
+  align-items: center;
+}
+
+.reset-text {
+  font-size: 14px;
+  color: #FF9800;
+}
+</style>

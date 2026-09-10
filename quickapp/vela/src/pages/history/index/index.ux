@@ -1,0 +1,355 @@
+<!--
+  history/index.ux - 历史记录页入口
+-->
+<template>
+  <div class="page">
+    <div class="top-bar">
+      <div class="back-btn" onclick="goBack">
+        <text class="back-text">← 返回</text>
+      </div>
+      <text class="page-title">历史记录</text>
+    </div>
+
+    <!-- 统计概览 -->
+    <div class="stats-card">
+      <div class="stat-row">
+        <div class="stat-item">
+          <text class="stat-value">{{totalCount}}</text>
+          <text class="stat-label">总记录</text>
+        </div>
+        <div class="stat-item">
+          <text class="stat-value">{{dominantPosture}}</text>
+          <text class="stat-label">主要姿态</text>
+        </div>
+        <div class="stat-item">
+          <text class="stat-value">{{avgConfidence}}</text>
+          <text class="stat-label">平均置信度</text>
+        </div>
+      </div>
+    </div>
+
+    <!-- 姿态分布 -->
+    <div class="dist-card">
+      <text class="card-title">姿态分布</text>
+      <div class="dist-row" for="{{distItems}}">
+        <text class="dist-label">{{$item.label}}</text>
+        <div class="dist-bar-bg">
+          <div class="dist-bar-fill" style="width: {{$item.width}}px; background-color: {{$item.color}}"></div>
+        </div>
+        <text class="dist-value">{{$item.value}}</text>
+      </div>
+    </div>
+
+    <!-- 最近记录列表 -->
+    <div class="list-card">
+      <text class="card-title">最近记录</text>
+      <div class="list-empty" if="{{historyList.length === 0}}">
+        <text class="empty-text">暂无历史记录</text>
+      </div>
+      <div class="list-item" for="{{historyList}}">
+        <div class="item-dot" style="background-color: {{$item.color}}"></div>
+        <div class="item-info">
+          <text class="item-posture">{{$item.label}}</text>
+          <text class="item-time">{{$item.timeText}}</text>
+        </div>
+        <text class="item-conf">{{$item.confText}}</text>
+      </div>
+    </div>
+
+    <!-- 清空按钮 -->
+    <div class="clear-btn" onclick="clearHistory" if="{{historyList.length > 0}}">
+      <text class="clear-text">清空记录</text>
+    </div>
+  </div>
+</template>
+
+<script>
+import storage from '@system.storage'
+import router from '@system.router'
+import { POSTURE_LABEL, POSTURE_COLOR } from '../../../common/constants'
+
+export default {
+  private: {
+    historyList: [],
+    distItems: [],
+    totalCount: '0',
+    dominantPosture: '--',
+    avgConfidence: '0%'
+  },
+
+  onInit() {
+    this._loadHistory()
+  },
+
+  _loadHistory() {
+    storage.get({
+      key: 'posture_history',
+      success: (data) => {
+        if (data) {
+          try {
+            const records = JSON.parse(data)
+            this._processHistory(records)
+          } catch (e) {
+            console.error('[History] 解析失败: ' + e)
+          }
+        }
+      },
+      fail: () => {
+        console.log('[History] 无历史数据')
+      }
+    })
+  },
+
+  _processHistory(records) {
+    if (!records || records.length === 0) return
+
+    this.totalCount = '' + records.length
+
+    const counts = {}
+    let totalConf = 0
+    for (let i = 0; i < records.length; i++) {
+      const p = records[i].posture
+      counts[p] = (counts[p] || 0) + 1
+      totalConf += records[i].confidence || 0
+    }
+
+    this.avgConfidence = (totalConf / records.length * 100).toFixed(0) + '%'
+
+    let maxCount = 0
+    let dominant = '--'
+    const keys = Object.keys(counts)
+    for (let i = 0; i < keys.length; i++) {
+      if (counts[keys[i]] > maxCount) {
+        maxCount = counts[keys[i]]
+        dominant = POSTURE_LABEL[keys[i]] || keys[i]
+      }
+    }
+    this.dominantPosture = dominant
+
+    const distItems = []
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i]
+      const pct = counts[k] / records.length
+      distItems.push({
+        label: POSTURE_LABEL[k] || k,
+        value: (pct * 100).toFixed(0) + '%',
+        width: Math.floor(pct * 120),
+        color: POSTURE_COLOR[k] || '#757575'
+      })
+    }
+    this.distItems = distItems
+
+    const recent = records.slice(-20).reverse()
+    const list = []
+    for (let i = 0; i < recent.length; i++) {
+      const r = recent[i]
+      const date = new Date(r.time)
+      list.push({
+        label: POSTURE_LABEL[r.posture] || '未知',
+        color: POSTURE_COLOR[r.posture] || '#757575',
+        timeText: this._formatTime(date),
+        confText: (r.confidence * 100).toFixed(0) + '%'
+      })
+    }
+    this.historyList = list
+  },
+
+  _formatTime(date) {
+    const h = date.getHours().toString().padStart(2, '0')
+    const m = date.getMinutes().toString().padStart(2, '0')
+    const s = date.getSeconds().toString().padStart(2, '0')
+    return h + ':' + m + ':' + s
+  },
+
+  clearHistory() {
+    storage.delete({
+      key: 'posture_history',
+      success: () => {
+        this.historyList = []
+        this.distItems = []
+        this.totalCount = '0'
+        this.dominantPosture = '--'
+        this.avgConfidence = '0%'
+      }
+    })
+  },
+
+  goBack() {
+    router.back()
+  }
+}
+</script>
+
+<style>
+.page {
+  flex-direction: column;
+  padding: 8px 10px;
+  background-color: #0a0a1a;
+  height: 100%;
+}
+
+.top-bar {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.back-btn {
+  padding: 4px 8px;
+  margin-right: 8px;
+}
+
+.back-text {
+  font-size: 14px;
+  color: #4CAF50;
+}
+
+.page-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.stats-card {
+  background-color: #1a1a2e;
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.stat-row {
+  flex-direction: row;
+  justify-content: space-around;
+}
+
+.stat-item {
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffffff;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: #888888;
+  margin-top: 2px;
+}
+
+.dist-card {
+  background-color: #1a1a2e;
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.card-title {
+  font-size: 13px;
+  color: #aaaaaa;
+  margin-bottom: 8px;
+}
+
+.dist-row {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.dist-label {
+  width: 40px;
+  font-size: 12px;
+  color: #cccccc;
+}
+
+.dist-bar-bg {
+  flex: 1;
+  height: 8px;
+  background-color: #333333;
+  border-radius: 4px;
+  margin-left: 6px;
+  margin-right: 6px;
+}
+
+.dist-bar-fill {
+  height: 8px;
+  border-radius: 4px;
+}
+
+.dist-value {
+  width: 35px;
+  font-size: 11px;
+  color: #aaaaaa;
+  text-align: right;
+}
+
+.list-card {
+  background-color: #1a1a2e;
+  border-radius: 12px;
+  padding: 10px;
+  flex: 1;
+}
+
+.list-empty {
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.empty-text {
+  font-size: 14px;
+  color: #555555;
+}
+
+.list-item {
+  flex-direction: row;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom-width: 1px;
+  border-bottom-color: #222222;
+}
+
+.item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  margin-right: 8px;
+}
+
+.item-info {
+  flex: 1;
+  flex-direction: column;
+}
+
+.item-posture {
+  font-size: 13px;
+  color: #ffffff;
+}
+
+.item-time {
+  font-size: 10px;
+  color: #666666;
+  margin-top: 1px;
+}
+
+.item-conf {
+  font-size: 12px;
+  color: #aaaaaa;
+}
+
+.clear-btn {
+  margin-top: 8px;
+  height: 32px;
+  border-radius: 16px;
+  background-color: #333333;
+  justify-content: center;
+  align-items: center;
+}
+
+.clear-text {
+  font-size: 13px;
+  color: #F44336;
+}
+</style>

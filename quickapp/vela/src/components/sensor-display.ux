@@ -1,0 +1,127 @@
+<!--
+  sensor-display.ux - 传感器实时数据显示组件
+  展示加速度计 X/Y/Z 三轴数据和加速度幅值
+-->
+<template>
+  <div class="sensor-card">
+    <text class="card-title">IMU 传感器</text>
+    <div class="data-row">
+      <text class="axis-label x-color">X</text>
+      <text class="axis-value">{{ax}}</text>
+    </div>
+    <div class="data-row">
+      <text class="axis-label y-color">Y</text>
+      <text class="axis-value">{{ay}}</text>
+    </div>
+    <div class="data-row">
+      <text class="axis-label z-color">Z</text>
+      <text class="axis-value">{{az}}</text>
+    </div>
+    <div class="divider"></div>
+    <div class="data-row">
+      <text class="axis-label mag-color">|A|</text>
+      <text class="axis-value">{{magnitude}}</text>
+    </div>
+    <div class="status-row">
+      <text class="status-dot" style="color: {{statusColor}}">●</text>
+      <text class="status-text">{{statusText}}</text>
+    </div>
+  </div>
+</template>
+
+<script>
+import { POSTURE_COLOR } from '../common/constants'
+
+export default {
+  props: {
+    /** 加速度X轴值 */
+    ax: { type: String, default: '0.00' },
+    /** 加速度Y轴值 */
+    ay: { type: String, default: '0.00' },
+    /** 加速度Z轴值 */
+    az: { type: String, default: '0.00' },
+    /** 加速度幅值 */
+    magnitude: { type: String, default: '0.00' },
+    /** 传感器状态: running / paused / idle */
+    sensorStatus: { type: String, default: 'idle' }
+  },
+
+  computed: {
+    /** 状态指示灯颜色 */
+    statusColor() {
+      if (this.sensorStatus === 'running') return POSTURE_COLOR.standing
+      if (this.sensorStatus === 'paused') return POSTURE_COLOR.unknown
+      return '#F44336'
+    },
+    /** 状态文本 */
+    statusText() {
+      if (this.sensorStatus === 'running') return '采集中'
+      if (this.sensorStatus === 'paused') return '已暂停'
+      return '未启动'
+    }
+  }
+}
+</script>
+
+<style>
+.sensor-card {
+  flex-direction: column;
+  background-color: #1a1a2e;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.card-title {
+  font-size: 14px;
+  color: #aaaaaa;
+  margin-bottom: 8px;
+}
+
+.data-row {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.axis-label {
+  width: 36px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.axis-value {
+  font-size: 16px;
+  color: #ffffff;
+  font-family: monospace;
+}
+
+.x-color { color: #F44336; }
+.y-color { color: #4CAF50; }
+.z-color { color: #2196F3; }
+.mag-color { color: #FF9800; }
+
+.divider {
+  height: 1px;
+  background-color: #333333;
+  margin: 6px 0;
+}
+
+.status-row {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.status-dot {
+  font-size: 10px;
+  margin-right: 4px;
+}
+
+.status-text {
+  font-size: 12px;
+  color: #888888;
+}
+</style>

@@ -1,1 +1,38 @@
-{"a":{"b":"你好"}}
+{
+  "app": {
+    "name": "姿态守护"
+  },
+  "posture": {
+    "standing": "站立",
+    "sitting": "坐下",
+    "walking": "行走",
+    "hand_raise": "抬手",
+    "fall": "摔倒",
+    "unknown": "未知"
+  },
+  "ui": {
+    "start": "开始",
+    "pause": "暂停",
+    "history": "记录",
+    "settings": "设置",
+    "back": "返回",
+    "clear": "清空",
+    "sampling_rate": "采样频率",
+    "high_precision": "高精度 (20ms)",
+    "normal": "标准 (40ms)",
+    "power_save": "省电 (100ms)",
+    "model_mode": "识别模式",
+    "rule_engine": "规则引擎 (省电)",
+    "cnn_inference": "CNN推理 (精准)",
+    "battery_save": "低电量自动降频",
+    "bg_pause": "后台自动暂停",
+    "reset_calibration": "重置传感器校准",
+    "total_records": "总记录",
+    "dominant_posture": "主要姿态",
+    "avg_confidence": "平均置信度",
+    "posture_dist": "姿态分布",
+    "recent_records": "最近记录",
+    "no_history": "暂无历史记录",
+    "fall_alert": "检测到摔倒!"
+  }
+}

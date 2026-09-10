@@ -1,10 +1,15 @@
 <script>
+/**
+ * app.ux - 应用全局入口
+ * 管理应用级生命周期, 初始化全局资源
+ */
 export default {
   onCreate() {
-    console.log("app created")
+    console.log('[App] 应用创建')
   },
+
   onDestroy() {
-    console.log("app destroyed")
+    console.log('[App] 应用销毁')
   }
 }
 </script>

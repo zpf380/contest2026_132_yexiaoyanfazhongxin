@@ -1,1 +1,38 @@
-{"a":{"b":"default hello"}}
+{
+  "app": {
+    "name": "Posture Guard"
+  },
+  "posture": {
+    "standing": "Standing",
+    "sitting": "Sitting",
+    "walking": "Walking",
+    "hand_raise": "Hand Raise",
+    "fall": "Fall",
+    "unknown": "Unknown"
+  },
+  "ui": {
+    "start": "Start",
+    "pause": "Pause",
+    "history": "History",
+    "settings": "Settings",
+    "back": "Back",
+    "clear": "Clear",
+    "sampling_rate": "Sampling Rate",
+    "high_precision": "High Precision (20ms)",
+    "normal": "Normal (40ms)",
+    "power_save": "Power Save (100ms)",
+    "model_mode": "Model Mode",
+    "rule_engine": "Rule Engine (Power Save)",
+    "cnn_inference": "CNN Inference (Precise)",
+    "battery_save": "Low Battery Auto-Reduce",
+    "bg_pause": "Auto-Pause in Background",
+    "reset_calibration": "Reset Calibration",
+    "total_records": "Total Records",
+    "dominant_posture": "Dominant Posture",
+    "avg_confidence": "Avg Confidence",
+    "posture_dist": "Posture Distribution",
+    "recent_records": "Recent Records",
+    "no_history": "No history yet",
+    "fall_alert": "Fall Detected!"
+  }
+}
