@@ -32,7 +32,7 @@
 
     <!-- 摔倒警告 -->
     <div class="fall-alert" if="{{showFallAlert}}">
-      <text class="fall-alert-text">⚠️ 检测到摔倒!</text>
+      <text class="fall-alert-text">[!] 检测到摔倒!</text>
     </div>
 
     <!-- 操作按钮 -->

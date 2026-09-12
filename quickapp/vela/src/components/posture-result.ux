@@ -54,17 +54,17 @@ export default {
     postureColor() {
       return POSTURE_COLOR[this.posture] || '#757575'
     },
-    /** 姿态表情符号 */
+    /** 姿态图标(纯文本, 手表端不支持emoji) */
     postureEmoji() {
-      const emojis = {
-        standing: '🧍',
-        sitting: '🪑',
-        walking: '🚶',
-        hand_raise: '✋',
-        fall: '⚠️',
-        unknown: '❓'
+      const icons = {
+        standing: 'S',
+        sitting: 'C',
+        walking: 'W',
+        hand_raise: 'H',
+        fall: '!',
+        unknown: '?'
       }
-      return emojis[this.posture] || '❓'
+      return icons[this.posture] || '?'
     },
     /** 置信度百分比文本 */
     confidenceText() {
